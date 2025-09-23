@@ -1,8 +1,10 @@
 import axios from 'axios';
 
-const API_BASE = (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.VITE_API_URL)
+const viteBase = (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.VITE_API_URL)
   ? import.meta.env.VITE_API_URL
-  : (typeof window !== 'undefined' ? window.location.origin : '');
+  : undefined;
+const originFallback = (typeof window !== 'undefined' ? window.location.origin : '');
+const API_BASE = viteBase || originFallback;
 
 const api = axios.create({
   baseURL: `${API_BASE}/api/food`,

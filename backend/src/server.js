@@ -27,8 +27,29 @@ app.use(limiter);
 
 // CORS configuration
 app.use(cors({
-  origin:  'https://food-tracker-ai-assistant-4njld6pxe-viveks-projects-aae1f8ad.vercel.app/',
-  
+  origin: (origin, callback) => {
+    const allowedOrigins = [
+      'https://food-tracker-ai-assistant.vercel.app',
+      'http://localhost:5173'
+    ];
+
+    // Allow same-origin or non-browser requests (no origin)
+    if (!origin) {
+      return callback(null, true);
+    }
+
+    try {
+      const hostname = new URL(origin).hostname;
+      const isVercelPreview = /\.vercel\.app$/.test(hostname);
+      if (allowedOrigins.includes(origin) || isVercelPreview) {
+        return callback(null, true);
+      }
+    } catch (_) {
+      // If origin is not a valid URL, reject below
+    }
+
+    return callback(new Error('Not allowed by CORS'));
+  },
   credentials: true
 }));
 
