@@ -27,7 +27,7 @@ app.use(limiter);
 
 // CORS configuration
 app.use(cors({
-  origin: process.env.FRONTEND_URL || 'http://localhost:5173',
+  origin: process.env.FRONTEND_URL || 'https://food-tracker-ai-assistant-4njld6pxe-viveks-projects-aae1f8ad.vercel.app/',
   credentials: true
 }));
 
