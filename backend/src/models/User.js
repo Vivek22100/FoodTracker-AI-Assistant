@@ -25,22 +25,6 @@ const userSchema = new mongoose.Schema({
     select: false
   },
   preferences: {
-    notifications: {
-      email: {
-        type: Boolean,
-        default: true
-      },
-      push: {
-        type: Boolean,
-        default: true
-      },
-      expiryReminderDays: {
-        type: Number,
-        default: 3,
-        min: 1,
-        max: 7
-      }
-    },
     units: {
       weight: {
         type: String,

@@ -70,7 +70,6 @@ const shelfLifeSchema = new mongoose.Schema({
 });
 
 // Index for efficient lookups
-shelfLifeSchema.index({ name: 1 });
 shelfLifeSchema.index({ category: 1 });
 shelfLifeSchema.index({ isActive: 1 });
 

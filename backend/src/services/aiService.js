@@ -1,12 +1,12 @@
-import { HfInference } from '@huggingface/inference';
+import { GoogleGenerativeAI } from '@google/generative-ai';
 import FoodItem from '../models/FoodItem.js';
 import nutritionService from './nutritionService.js';
 import ShelfLifeService from './shelfLifeService.js';
 
 class AIService {
   constructor() {
-    this.hf = new HfInference(process.env.HUGGING_FACE_API_KEY);
-    this.chatModel = process.env.HF_CHAT_MODEL || 'meta-llama/Meta-Llama-3-8B-Instruct';
+    this.genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+    this.model = this.genAI.getGenerativeModel({ model: process.env.GEMINI_MODEL || 'gemini-1.5-flash' });
   }
 
   // Process general chat messages
@@ -17,215 +17,216 @@ class AIService {
 
       const prompt = `${systemPrompt}\n\nUser Context: ${userContext}\n\nUser: ${message}`;
 
-      const response = await this.hf.textGeneration({
-        model: this.chatModel,
-        inputs: prompt,
-        parameters: {
-          max_new_tokens: 300,
-          temperature: 0.7,
-        }
-      });
-
-      // response.decoded_text or response.generated_text depending on model backend
-      const text = response.generated_text || response?.[0]?.generated_text || String(response);
-      return text.replace(/^\s*Assistant:\s*/i, '').trim();
+      const result = await this.model.generateContent(prompt);
+      const response = await result.response;
+      return response.text().trim();
     } catch (error) {
-      console.error('AI service error:', error);
+      console.error("AI service error:", error);
       return "I'm sorry, I'm having trouble processing your request right now. Please try again later.";
     }
   }
 
-  // Analyze food text and extract food items
-  async analyzeFoodText(text, userId) {
+  // Diagnostics: verify API key and model access
+  async diagnostics() {
+    const tokenLoaded = Boolean(process.env.GEMINI_API_KEY);
+    const model = process.env.GEMINI_MODEL || 'gemini-pro';
+
+    const result = {
+      tokenLoaded,
+      model,
+      apiAccess: null,
+      ok: false
+    };
+
     try {
-      const systemPrompt = `You are a food tracking assistant. Analyze the following text and extract food items with their details.
-      
-      Return a JSON array of food objects with this structure:
-      [
-        {
-          "name": "food name",
-          "category": "fruits|vegetables|dairy|meat|poultry|seafood|grains|nuts|legumes|beverages|snacks|condiments|frozen|canned|bakery|other",
-          "quantity": {
-            "amount": number,
-            "unit": "pieces|kg|g|lbs|oz|l|ml|cups|tbsp|tsp|slices|cans|bottles|packages"
-          },
-          "purchaseDate": "YYYY-MM-DD" (if mentioned, otherwise use today),
-          "storageLocation": "refrigerator|freezer|pantry|counter|other"
-        }
-      ]
-      
-      Only extract food items that are clearly mentioned. If no food items are found, return an empty array.`;
-
-      const prompt = `${systemPrompt}\n\nText: ${text}\n\nReturn only valid JSON with no extra commentary.`;
-
-      const response = await this.hf.textGeneration({
-        model: this.chatModel,
-        inputs: prompt,
-        parameters: {
-          max_new_tokens: 500,
-          temperature: 0.2,
-        }
-      });
-
-      const raw = response.generated_text || response?.[0]?.generated_text || '[]';
-      const jsonStart = raw.indexOf('[');
-      const jsonEnd = raw.lastIndexOf(']');
-      const safe = jsonStart !== -1 && jsonEnd !== -1 ? raw.slice(jsonStart, jsonEnd + 1) : '[]';
-      const analysis = JSON.parse(safe);
-
-      // Validate and process each food item
-      const processedItems = [];
-      for (const item of analysis) {
-        if (this.validateFoodItem(item)) {
-          // Get shelf life and calculate expiry date
-          const shelfLifeData = await ShelfLifeService.getShelfLife(item.name, item.storageLocation);
-          const purchaseDate = new Date(item.purchaseDate || new Date());
-          const expiryDate = new Date(purchaseDate.getTime() + (shelfLifeData.shelfLife * 24 * 60 * 60 * 1000));
-
-          processedItems.push({
-            ...item,
-            expiryDate: expiryDate.toISOString(),
-            shelfLife: shelfLifeData.shelfLife
-          });
-        }
+      if (!tokenLoaded) {
+        result.apiAccess = { ok: false, error: 'Missing GEMINI_API_KEY' };
+        return result;
       }
 
-      return {
-        extractedItems: processedItems,
-        originalText: text,
-        timestamp: new Date().toISOString()
-      };
+      // Test API access with a simple request
+      try {
+        const testResult = await this.model.generateContent("Hello");
+        await testResult.response;
+        result.apiAccess = { ok: true };
+      } catch (err) {
+        result.apiAccess = { 
+          ok: false, 
+          error: err.message || String(err)
+        };
+      }
+
+      result.ok = Boolean(result.apiAccess?.ok);
+      return result;
     } catch (error) {
-      console.error('AI food analysis error:', error);
-      return {
-        extractedItems: [],
-        originalText: text,
-        error: "Failed to analyze food text"
-      };
+      return { ...result, ok: false, error: error.message };
     }
   }
 
-  // Suggest recipes for expiring items
-  async suggestRecipes(foodItems, userId) {
-    try {
-      const foodNames = foodItems.map(item => item.name).join(', ');
-      
-      const systemPrompt = `You are a cooking assistant. Given the following food items that are expiring soon, suggest 3-5 simple recipes that use these ingredients.
-      
-      For each recipe, provide:
-      - Recipe name
-      - Brief description
-      - Main ingredients used from the list
-      - Estimated cooking time
-      - Difficulty level (Easy/Medium/Hard)
-      
-      Format as a JSON array of recipe objects.`;
-
-      const prompt = `${systemPrompt}\n\nFood items expiring soon: ${foodNames}\n\nReturn only valid JSON with no extra commentary.`;
-
-      const response = await this.hf.textGeneration({
-        model: this.chatModel,
-        inputs: prompt,
-        parameters: {
-          max_new_tokens: 600,
-          temperature: 0.4,
-        }
-      });
-
-      const raw = response.generated_text || response?.[0]?.generated_text || '[]';
-      const jsonStart = raw.indexOf('[');
-      const jsonEnd = raw.lastIndexOf(']');
-      const safe = jsonStart !== -1 && jsonEnd !== -1 ? raw.slice(jsonStart, jsonEnd + 1) : '[]';
-      const recipes = JSON.parse(safe);
-
-      return {
-        recipes,
-        ingredients: foodNames,
-        timestamp: new Date().toISOString()
-      };
-    } catch (error) {
-      console.error('AI recipe suggestion error:', error);
-      return {
-        recipes: [],
-        ingredients: foodItems.map(item => item.name).join(', '),
-        error: "Failed to generate recipe suggestions"
-      };
-    }
-  }
-
-  // Get system prompt for the AI agent
+  // Get system prompt for the AI assistant
   getSystemPrompt() {
-    return `You are a helpful food tracking assistant for a Food Expiry & Nutrition Tracker app. Your role is to:
+    return `You are a helpful AI assistant for a food tracking application. You help users with:
+- Food item analysis and nutrition information
+- Shelf life recommendations
+- Recipe suggestions for expiring items
+- General food-related questions
+- Meal planning and food storage tips
 
-    1. Help users add food items to their tracker
-    2. Answer questions about their food inventory
-    3. Provide nutrition information
-    4. Suggest recipes for expiring items
-    5. Give advice on food storage and shelf life
-
-    You should be friendly, helpful, and provide accurate information. When users mention food items, help them understand:
-    - Proper storage methods
-    - Expected shelf life
-    - Nutrition benefits
-    - Recipe suggestions
-
-    Always be encouraging about healthy eating and reducing food waste.`;
+Always provide helpful, accurate, and practical advice related to food management and nutrition in short words steps`;
   }
 
   // Get user context for personalized responses
   async getUserContext(userId) {
     try {
-      const [expiringItems, totalItems] = await Promise.all([
-        FoodItem.find({
-          user: userId,
-          isConsumed: false,
-          expiryDate: { $lte: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000) }
-        }).limit(5),
-        FoodItem.countDocuments({ user: userId, isConsumed: false })
-      ]);
+      const foodItems = await FoodItem.find({ userId }).limit(10).sort({ createdAt: -1 });
+      const expiringItems = foodItems.filter(item => {
+        const daysUntilExpiry = Math.ceil((new Date(item.expiryDate) - new Date()) / (1000 * 60 * 60 * 24));
+        return daysUntilExpiry <= 3 && daysUntilExpiry >= 0;
+      });
 
-      const context = {
-        totalItems,
-        expiringItems: expiringItems.map(item => ({
-          name: item.name,
-          daysUntilExpiry: Math.ceil((new Date(item.expiryDate) - new Date()) / (1000 * 60 * 60 * 24))
-        }))
-      };
+      let context = `User has ${foodItems.length} food items in their inventory.`;
+      
+      if (expiringItems.length > 0) {
+        context += ` Items expiring soon: ${expiringItems.map(item => item.name).join(', ')}.`;
+      }
 
-      return JSON.stringify(context);
+      return context;
     } catch (error) {
       console.error('Error getting user context:', error);
-      return '{}';
+      return 'User context unavailable.';
     }
   }
 
-  // Validate food item structure
-  validateFoodItem(item) {
-    const requiredFields = ['name', 'category', 'quantity'];
-    const validCategories = [
-      'fruits', 'vegetables', 'dairy', 'meat', 'poultry', 'seafood',
-      'grains', 'nuts', 'legumes', 'beverages', 'snacks', 'condiments',
-      'frozen', 'canned', 'bakery', 'other'
-    ];
-    const validUnits = [
-      'pieces', 'kg', 'g', 'lbs', 'oz', 'l', 'ml', 'cups',
-      'tbsp', 'tsp', 'slices', 'cans', 'bottles', 'packages'
-    ];
+  // Analyze food text and extract structured information
+  async analyzeFoodText(text, userId) {
+    try {
+      const systemPrompt = `Analyze the following food text and extract structured information. Return a JSON object with:
+{
+  "foodItems": [
+    {
+      "name": "food name",
+      "quantity": "quantity with unit",
+      "expiryDate": "YYYY-MM-DD format",
+      "category": "category like fruits, vegetables, dairy, etc.",
+      "notes": "any additional notes"
+    }
+  ],
+  "confidence": "high/medium/low"
+}
 
-    // Check required fields
-    for (const field of requiredFields) {
-      if (!item[field]) return false;
+Text to analyze: ${text}`;
+
+      const userContext = await this.getUserContext(userId);
+      const prompt = `${systemPrompt}\n\nUser Context: ${userContext}\n\nText to analyze: ${text}`;
+
+      const result = await this.model.generateContent(prompt);
+      const response = await result.response;
+      const responseText = response.text().trim();
+
+      // Try to parse JSON response
+      try {
+        const jsonMatch = responseText.match(/\{[\s\S]*\}/);
+        if (jsonMatch) {
+          return JSON.parse(jsonMatch[0]);
+        }
+      } catch (parseError) {
+        console.error('Error parsing AI response as JSON:', parseError);
+      }
+
+      // Fallback response
+      return {
+        foodItems: [],
+        confidence: "low",
+        rawResponse: responseText
+      };
+    } catch (error) {
+      console.error('Error analyzing food text:', error);
+      return {
+        foodItems: [],
+        confidence: "low",
+        error: "Analysis failed"
+      };
+    }
+  }
+
+  // Suggest recipes for expiring food items
+  async suggestRecipes(foodItems, userId) {
+    try {
+      const foodNames = foodItems.map(item => item.name).join(', ');
+      const systemPrompt = `Suggest 3-5 simple recipes using these expiring food items: ${foodNames}. 
+For each recipe, provide:
+- Recipe name
+- Ingredients needed (including the expiring items)
+- Simple cooking instructions
+- Estimated cooking time
+- Difficulty level (easy/medium/hard)
+
+Format as a JSON array of recipe objects.`;
+
+      const userContext = await this.getUserContext(userId);
+      const prompt = `${systemPrompt}\n\nUser Context: ${userContext}\n\nExpiring items: ${foodNames}`;
+
+      const result = await this.model.generateContent(prompt);
+      const response = await result.response;
+      const responseText = response.text().trim();
+
+      // Try to parse JSON response
+      try {
+        const jsonMatch = responseText.match(/\[[\s\S]*\]/);
+        if (jsonMatch) {
+          return JSON.parse(jsonMatch[0]);
+        }
+      } catch (parseError) {
+        console.error('Error parsing recipe suggestions as JSON:', parseError);
+      }
+
+      // Fallback response
+      return [{
+        name: "Quick Stir Fry",
+        ingredients: [foodNames],
+        instructions: "Heat oil in a pan, add the ingredients, stir-fry for 5-7 minutes until cooked through.",
+        cookingTime: "10 minutes",
+        difficulty: "easy"
+      }];
+    } catch (error) {
+      console.error('Error suggesting recipes:', error);
+      return [{
+        name: "Simple Recipe",
+        ingredients: [foodNames],
+        instructions: "Use your creativity to combine these ingredients into a delicious meal.",
+        cookingTime: "15 minutes",
+        difficulty: "easy"
+      }];
+    }
+  }
+
+  // Validate food item data
+  validateFoodItem(foodItem) {
+    const errors = [];
+
+    if (!foodItem.name || foodItem.name.trim().length === 0) {
+      errors.push('Food name is required');
     }
 
-    // Check category
-    if (!validCategories.includes(item.category)) return false;
+    if (!foodItem.expiryDate) {
+      errors.push('Expiry date is required');
+    } else {
+      const expiryDate = new Date(foodItem.expiryDate);
+      if (isNaN(expiryDate.getTime())) {
+        errors.push('Invalid expiry date format');
+      } else if (expiryDate < new Date()) {
+        errors.push('Expiry date cannot be in the past');
+      }
+    }
 
-    // Check quantity structure
-    if (!item.quantity.amount || !item.quantity.unit) return false;
-    if (!validUnits.includes(item.quantity.unit)) return false;
-    if (typeof item.quantity.amount !== 'number' || item.quantity.amount <= 0) return false;
+    if (foodItem.quantity && foodItem.quantity <= 0) {
+      errors.push('Quantity must be greater than 0');
+    }
 
-    return true;
+    return {
+      isValid: errors.length === 0,
+      errors
+    };
   }
 }
 

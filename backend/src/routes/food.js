@@ -143,7 +143,8 @@ router.post('/', auth, validateFoodItem, async (req, res) => {
       expiryDate,
       storageLocation,
       notes,
-      tags
+      tags,
+      nutrition
     } = req.body;
 
     // If no expiry date provided, calculate it using shelf life
@@ -168,7 +169,9 @@ router.post('/', auth, validateFoodItem, async (req, res) => {
       shelfLife,
       storageLocation: storageLocation || 'refrigerator',
       notes,
-      tags: tags || []
+      tags: tags || [],
+      nutrition: nutrition || {},
+      nutritionSource: nutrition ? 'api' : 'estimated'
     });
 
     await foodItem.save();
@@ -196,7 +199,8 @@ router.put('/:id', auth, async (req, res) => {
       expiryDate,
       storageLocation,
       notes,
-      tags
+      tags,
+      nutrition
     } = req.body;
 
     const foodItem = await FoodItem.findOne({
@@ -217,6 +221,10 @@ router.put('/:id', auth, async (req, res) => {
     if (storageLocation) foodItem.storageLocation = storageLocation;
     if (notes !== undefined) foodItem.notes = notes;
     if (tags) foodItem.tags = tags;
+    if (nutrition !== undefined) {
+      foodItem.nutrition = nutrition;
+      foodItem.nutritionSource = nutrition ? 'api' : 'estimated';
+    }
 
     await foodItem.save();
 

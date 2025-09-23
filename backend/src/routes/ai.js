@@ -1,6 +1,6 @@
 import express from 'express';
 import auth from '../middleware/auth.js';
-import aiService from '../services/aiService.js';
+import aiService from '../services/mockAIService.js';
 
 const router = express.Router();
 
@@ -24,6 +24,20 @@ router.post('/chat', auth, async (req, res) => {
   } catch (error) {
     console.error('AI chat error:', error);
     res.status(500).json({ message: 'Server error processing AI request' });
+  }
+});
+
+// @route   GET /api/ai/diagnostics
+// @desc    Verify Hugging Face token and model access
+// @access  Private (only to logged-in users)
+router.get('/diagnostics', auth, async (req, res) => {
+  try {
+    const diag = await aiService.diagnostics();
+    const status = diag.ok ? 200 : 500;
+    res.status(status).json(diag);
+  } catch (error) {
+    console.error('AI diagnostics error:', error);
+    res.status(500).json({ message: 'Server error running AI diagnostics' });
   }
 });
 

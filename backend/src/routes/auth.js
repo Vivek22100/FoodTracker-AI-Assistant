@@ -117,10 +117,9 @@ router.get('/me', auth, async (req, res) => {
 // @access  Private
 router.put('/preferences', auth, async (req, res) => {
   try {
-    const { notifications, units } = req.body;
+    const { units } = req.body;
 
     const updateData = {};
-    if (notifications) updateData['preferences.notifications'] = notifications;
     if (units) updateData['preferences.units'] = units;
 
     const user = await User.findByIdAndUpdate(

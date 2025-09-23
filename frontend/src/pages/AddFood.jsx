@@ -1,6 +1,7 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { foodAPI } from '../api/food';
+import { nutritionAPI } from '../api/nutrition';
 import './FoodForm.css';
 
 const AddFood = () => {
@@ -16,6 +17,9 @@ const AddFood = () => {
   });
   const [errors, setErrors] = useState({});
   const [isLoading, setIsLoading] = useState(false);
+  const [nutritionData, setNutritionData] = useState(null);
+  const [isLoadingNutrition, setIsLoadingNutrition] = useState(false);
+  const [showNutritionLookup, setShowNutritionLookup] = useState(false);
   const navigate = useNavigate();
 
   const categories = [
@@ -140,7 +144,9 @@ const AddFood = () => {
           unit: formData.quantity.unit
         },
         purchaseDate: new Date(formData.purchaseDate).toISOString(),
-        expiryDate: new Date(formData.expiryDate).toISOString()
+        expiryDate: new Date(formData.expiryDate).toISOString(),
+        // Include nutrition data if available
+        ...(nutritionData && { nutrition: nutritionData })
       };
       
       await foodAPI.createFoodItem(foodData);
@@ -156,6 +162,39 @@ const AddFood = () => {
 
   const handleCancel = () => {
     navigate('/dashboard');
+  };
+
+  // Look up nutrition data
+  const handleNutritionLookup = async () => {
+    if (!formData.name.trim()) {
+      setErrors(prev => ({ ...prev, name: 'Food name is required for nutrition lookup' }));
+      return;
+    }
+
+    setIsLoadingNutrition(true);
+    try {
+      const data = await nutritionAPI.getNutritionData(
+        formData.name,
+        parseFloat(formData.quantity.amount) || 100,
+        formData.quantity.unit
+      );
+      setNutritionData(data.nutrition);
+      setShowNutritionLookup(true);
+    } catch (error) {
+      console.error('Nutrition lookup failed:', error);
+      setErrors(prev => ({ 
+        ...prev, 
+        nutrition: 'Failed to fetch nutrition data. You can still add the food item.' 
+      }));
+    } finally {
+      setIsLoadingNutrition(false);
+    }
+  };
+
+  // Clear nutrition data
+  const clearNutritionData = () => {
+    setNutritionData(null);
+    setShowNutritionLookup(false);
   };
 
   return (
@@ -176,16 +215,27 @@ const AddFood = () => {
           <div className="form-row">
             <div className="form-group">
               <label htmlFor="name">Food Name *</label>
-              <input
-                type="text"
-                id="name"
-                name="name"
-                value={formData.name}
-                onChange={handleChange}
-                className={errors.name ? 'error' : ''}
-                placeholder="e.g., Organic Bananas"
-              />
+              <div className="input-with-button">
+                <input
+                  type="text"
+                  id="name"
+                  name="name"
+                  value={formData.name}
+                  onChange={handleChange}
+                  className={errors.name ? 'error' : ''}
+                  placeholder="e.g., Organic Bananas"
+                />
+                <button
+                  type="button"
+                  onClick={handleNutritionLookup}
+                  disabled={isLoadingNutrition || !formData.name.trim()}
+                  className="nutrition-lookup-btn"
+                >
+                  {isLoadingNutrition ? 'Looking up...' : '🔍 Nutrition'}
+                </button>
+              </div>
               {errors.name && <span className="error-message">{errors.name}</span>}
+              {errors.nutrition && <span className="error-message">{errors.nutrition}</span>}
             </div>
 
             <div className="form-group">
@@ -271,6 +321,48 @@ const AddFood = () => {
               {errors.expiryDate && <span className="error-message">{errors.expiryDate}</span>}
             </div>
           </div>
+
+          {/* Nutrition Data Display */}
+          {showNutritionLookup && nutritionData && (
+            <div className="nutrition-section">
+              <div className="nutrition-header">
+                <h3>Nutrition Information</h3>
+                <button
+                  type="button"
+                  onClick={clearNutritionData}
+                  className="clear-nutrition-btn"
+                >
+                  ✕
+                </button>
+              </div>
+              <div className="nutrition-grid">
+                <div className="nutrition-item">
+                  <span className="nutrition-label">Calories</span>
+                  <span className="nutrition-value">{nutritionData.calories || 'N/A'}</span>
+                </div>
+                <div className="nutrition-item">
+                  <span className="nutrition-label">Protein</span>
+                  <span className="nutrition-value">{nutritionData.protein || 'N/A'}g</span>
+                </div>
+                <div className="nutrition-item">
+                  <span className="nutrition-label">Fat</span>
+                  <span className="nutrition-value">{nutritionData.fat || 'N/A'}g</span>
+                </div>
+                <div className="nutrition-item">
+                  <span className="nutrition-label">Carbs</span>
+                  <span className="nutrition-value">{nutritionData.carbohydrates || 'N/A'}g</span>
+                </div>
+                <div className="nutrition-item">
+                  <span className="nutrition-label">Fiber</span>
+                  <span className="nutrition-value">{nutritionData.fiber || 'N/A'}g</span>
+                </div>
+                <div className="nutrition-item">
+                  <span className="nutrition-label">Sugar</span>
+                  <span className="nutrition-value">{nutritionData.sugar || 'N/A'}g</span>
+                </div>
+              </div>
+            </div>
+          )}
 
           <div className="form-actions">
             <button 
