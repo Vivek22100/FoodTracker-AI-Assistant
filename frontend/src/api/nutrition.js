@@ -1,10 +1,12 @@
 import axios from 'axios';
 
-const API_URL = '/api/nutrition';
+const API_BASE = (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.VITE_API_URL)
+  ? import.meta.env.VITE_API_URL
+  : (typeof window !== 'undefined' ? window.location.origin : '');
 
 // Create axios instance with default config
 const api = axios.create({
-  baseURL: API_URL,
+  baseURL: `${API_BASE}/api/nutrition`,
   headers: {
     'Content-Type': 'application/json',
   },
@@ -44,5 +46,6 @@ export const nutritionAPI = {
     }
   }
 };
+
 
 

@@ -128,3 +128,4 @@ You can now:
 The nutrition data will be automatically saved with each food item and displayed in your dashboard!
 
 
+
