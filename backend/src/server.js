@@ -11,9 +11,13 @@ import authRoutes from './routes/auth.js';
 import foodRoutes from './routes/food.js';
 import nutritionRoutes from './routes/nutrition.js';
 import aiRoutes from './routes/ai.js';
+import mealRoutes from './routes/meals.js';
 import ShelfLifeService from './services/shelfLifeService.js';
 
 const app = express();
+
+// Trust the proxy in front of the server (Render) so real visitor IPs are used
+app.set('trust proxy', 1);
 
 // Security middleware
 app.use(helmet());
@@ -71,6 +75,7 @@ app.use('/api/auth', authRoutes);
 app.use('/api/food', foodRoutes);
 app.use('/api/nutrition', nutritionRoutes);
 app.use('/api/ai', aiRoutes);
+app.use('/api/meals', mealRoutes);
 
 // Health check endpoint
 app.get('/api/health', (req, res) => {

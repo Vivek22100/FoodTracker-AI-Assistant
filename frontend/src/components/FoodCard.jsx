@@ -73,7 +73,7 @@ const FoodCard = ({ item, onDelete }) => {
 
         {item.nutrition && (
           <div className="nutrition-info">
-            <h4>Nutrition (per 100g)</h4>
+            <h4>Nutrition (total for this quantity)</h4>
             <div className="nutrition-grid">
               <div className="nutrition-item">
                 <span className="nutrition-label">Calories</span>
@@ -89,7 +89,7 @@ const FoodCard = ({ item, onDelete }) => {
               </div>
               <div className="nutrition-item">
                 <span className="nutrition-label">Carbs</span>
-                <span className="nutrition-value">{item.nutrition.carbs || 'N/A'}g</span>
+                <span className="nutrition-value">{item.nutrition.carbohydrates ?? 'N/A'}g</span>
               </div>
             </div>
           </div>
